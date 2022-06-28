@@ -1,0 +1,17 @@
+
+syntax = "proto3";
+
+package externalscripting;
+
+service ExternalScripting {
+	rpc TriggerEvent(EventData) returns (EventResponse) {}
+}
+
+message EventData {
+	string eventName = 1;
+	string eventPayload = 2;
+	string eventSource = 3;
+}
+
+message EventResponse {
+}
