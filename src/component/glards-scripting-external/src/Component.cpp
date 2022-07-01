@@ -6,6 +6,13 @@
  */
 
 #include <unordered_set>
+#include <grpc/grpc.h>
+#include <grpcpp/channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
+
+#include "externalscripting.pb.h"
+#include "externalscripting.grpc.pb.h"
 
 #include "StdInc.h"
 #include "ComponentLoader.h"
@@ -53,8 +60,52 @@ extern "C" DLL_EXPORT Component* CreateComponent()
 }
 
 
-static std::mutex urlMutex;
-static std::unordered_set<std::string> grpcUrls;
+class GrpcEndpoint
+{
+public:
+	GrpcEndpoint(const std::string url)
+	{
+		m_url = url;
+		auto channel = grpc::CreateChannel(url, grpc::InsecureChannelCredentials());
+		m_stub = externalscripting::ExternalScripting::NewStub(channel);
+		m_data = std::vector<externalscripting::EventData>();
+	}
+
+	void AddEvent(std::string name, std::string payload, std::string source)
+	{
+		auto data = externalscripting::EventData();
+		data.set_eventname(name);
+		data.set_eventpayload(payload);
+		data.set_eventsource(source);
+		m_data.emplace_back(data);
+	}
+
+	void SendEvents()
+	{
+		grpc::ClientContext ctx;
+		for (auto ev : m_data)
+		{
+			externalscripting::EventResponse response;
+			auto status = m_stub->TriggerEvent(&ctx, ev, &response);
+			if (!status.ok())
+			{
+				trace("Unable to send RPC data to %s : %s", m_url, status.error_message());
+				break;
+			}
+		}
+
+		m_data.clear();
+	}
+
+private:
+
+	std::vector<externalscripting::EventData> m_data;
+	std::string m_url;
+	std::unique_ptr<externalscripting::ExternalScripting::Stub> m_stub;
+};
+
+static std::unordered_set<GrpcEndpoint*> g_grpcEndpoints;
+
 
 static InitFunction initFunction([]()
 {
@@ -62,8 +113,7 @@ static InitFunction initFunction([]()
 	{
 		trace("Add GRPC URL %s\n", url);
 
-		const std::lock_guard lock(urlMutex);
-		grpcUrls.emplace(url);
+		g_grpcEndpoints.emplace(new GrpcEndpoint{url});
 	});
 
 	fx::ResourceManager::OnInitializeInstance.Connect([](fx::ResourceManager* self)
@@ -74,7 +124,10 @@ static InitFunction initFunction([]()
 		{
 			eventComponent->OnTriggerEvent.Connect([](const std::string& eventName, const std::string& eventPayload, const std::string& eventSource, bool* eventCanceled)
 			{
-				//TODO: Store events for dispatch
+				for (GrpcEndpoint* ep : g_grpcEndpoints)
+				{
+					ep->AddEvent(eventName, eventPayload, eventSource);
+				}
 			});
 		}
 
