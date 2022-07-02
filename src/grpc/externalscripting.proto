@@ -9,7 +9,7 @@ service ExternalScripting {
 
 message EventData {
 	string eventName = 1;
-	string eventPayload = 2;
+	bytes eventPayload = 2;
 	string eventSource = 3;
 }
 
