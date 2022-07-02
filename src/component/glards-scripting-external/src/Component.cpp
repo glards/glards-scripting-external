@@ -66,7 +66,20 @@ public:
 	GrpcEndpoint(const std::string url)
 	{
 		m_url = url;
-		auto channel = grpc::CreateChannel(url, grpc::InsecureChannelCredentials());
+
+		auto tlsOpts = grpc::experimental::TlsChannelCredentialsOptions();
+		tlsOpts.set_verify_server_certs(false);
+		auto creds = grpc::experimental::TlsCredentials(tlsOpts);
+
+		grpc::ChannelArguments gargs;
+		gargs.SetSslTargetNameOverride("localhost");
+
+		//auto sslOpt = grpc::SslCredentialsOptions();
+		//auto creds = grpc::SslCredentials(sslOpt);
+
+		//auto creds = grpc::InsecureChannelCredentials();
+		auto channel = grpc::CreateCustomChannel(url, creds, gargs);
+
 		m_stub = externalscripting::ExternalScripting::NewStub(channel);
 		m_data = std::vector<externalscripting::EventData>();
 	}
@@ -89,7 +102,7 @@ public:
 			auto status = m_stub->TriggerEvent(&ctx, ev, &response);
 			if (!status.ok())
 			{
-				trace("Unable to send RPC data to %s : %s", m_url, status.error_message());
+				trace("Unable to send RPC data to %s : %s\n\n%s\n", m_url, status.error_message(), status.error_details());
 				break;
 			}
 		}
@@ -133,7 +146,10 @@ static InitFunction initFunction([]()
 
 		self->OnTick.Connect([]()
 		{
-			//TODO: Send events remotely and dispatch local/client events
+				for (GrpcEndpoint* ep : g_grpcEndpoints)
+				{
+					ep->SendEvents();
+				}
 		});
 	});
 });
