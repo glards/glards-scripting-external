@@ -1,6 +1,6 @@
 ## Ignore sepcific to the project
 
-src/component/glards-scripting-external/build/
+src/component/glards-scripting-external/out/
 
 
 ## Ignore Visual Studio temporary files, build results, and

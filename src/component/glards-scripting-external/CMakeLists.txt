@@ -1,16 +1,20 @@
 cmake_minimum_required(VERSION 3.10)
 
-include(FindProtobuf)
-
 set (VCPKG_HOME "D:/dev/vcpkg") #IMPORTANT: change this to where your vcpkg exists.
 set (CMAKE_TOOLCHAIN_FILE "${VCPKG_HOME}/scripts/buildsystems/vcpkg.cmake")
 set (CMAKE_CXX_STANDARD 20)
-set (CMAKE_BUILD_TYPE Debug)
-set (Protobuf_USE_STATIC_LIBS ON)
+set (CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set (VCPKG_BUILD_TYPE release)
+set (VCPKG_TARGET_ARCHITECTURE x64)
+set (VCPKG_LIBRARY_LINKAGE dynamic)
+set (VCPKG_CRT_LINKAGE dynamic)
+set (VCPKG_TARGET_TRIPLET "x64-windows")
 
 # Find FiveM
-option (FIVEM_ROOT "Path to the FIVEM sources" "")
-if(FIVEM_ROOT STREQUAL "OFF")
+set (FIVEM_ROOT "" CACHE PATH "Path to the FIVEM sources")
+if(FIVEM_ROOT STREQUAL "")
 	message(FATAL_ERROR "You need to set FIVEM_ROOT variable")
 endif()
 
@@ -74,7 +78,6 @@ include_directories(
 	${BOOST_ROOT}
 )
 
-
 include_directories(include)
 
 add_library(glards-scripting-external SHARED
@@ -116,17 +119,21 @@ message(STATUS "Using protobuf ${Protobuf_VERSION}")
 include_directories(${Protobuf_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-find_program(_PROTOBUF_PROTOC protoc)
+#find_program(_PROTOBUF_PROTOC protoc)
 
 
 find_package(gRPC CONFIG REQUIRED)
 message(STATUS "Using gRPC ${gRPC_VERSION}")
 
-find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
+get_filename_component(TOOLS_DIR "../../../tools" ABSOLUTE)
 
+set (_PROTOBUF_PROTOC "${TOOLS_DIR}/protoc.exe")
+set (_GRPC_CPP_PLUGIN_EXECUTABLE "${TOOLS_DIR}/grpc_cpp_plugin.exe")
 
 get_filename_component(proto "../../grpc/externalscripting.proto" ABSOLUTE)
 get_filename_component(proto_path "${proto}" PATH)
+
+message(STATUS "Generating pb and grpc stub in ${CMAKE_CURRENT_BINARY_DIR}")
 
 set(proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/externalscripting.pb.cc")
 set(proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/externalscripting.pb.h")

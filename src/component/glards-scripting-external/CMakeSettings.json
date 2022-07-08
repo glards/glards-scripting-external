@@ -1,0 +1,22 @@
+﻿{
+  "configurations": [
+    {
+      "name": "x64-Release",
+      "generator": "Ninja",
+      "configurationType": "MinSizeRel",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": [
+        {
+          "name": "FIVEM_ROOT",
+          "value": "D:\\Dev\\fivem",
+          "type": "PATH"
+        }
+      ]
+    }
+  ]
+}

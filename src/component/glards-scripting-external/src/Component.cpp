@@ -5,6 +5,7 @@
  * regarding licensing.
  */
 
+
 #include <unordered_set>
 #include <grpc/grpc.h>
 #include <grpcpp/channel.h>
@@ -19,6 +20,8 @@
 #include "ResourceEventComponent.h"
 #include "ResourceManager.h"
 #include "console/Console.CommandHelpers.h"
+
+#include <wincrypt.h>
 
 class ComponentInstance : public Component
 {
@@ -67,17 +70,11 @@ public:
 	{
 		m_url = url;
 
-		auto tlsOpts = grpc::experimental::TlsChannelCredentialsOptions();
-		tlsOpts.set_verify_server_certs(false);
-		auto creds = grpc::experimental::TlsCredentials(tlsOpts);
-
 		grpc::ChannelArguments gargs;
-		gargs.SetSslTargetNameOverride("localhost");
 
-		//auto sslOpt = grpc::SslCredentialsOptions();
-		//auto creds = grpc::SslCredentials(sslOpt);
+		auto sslOpt = getSslOptions();
+		auto creds = grpc::SslCredentials(sslOpt);
 
-		//auto creds = grpc::InsecureChannelCredentials();
 		auto channel = grpc::CreateCustomChannel(url, creds, gargs);
 
 		m_stub = externalscripting::ExternalScripting::NewStub(channel);
@@ -95,9 +92,9 @@ public:
 
 	void SendEvents()
 	{
-		grpc::ClientContext ctx;
 		for (auto ev : m_data)
 		{
+			grpc::ClientContext ctx;
 			externalscripting::EventResponse response;
 			auto status = m_stub->TriggerEvent(&ctx, ev, &response);
 			if (!status.ok())
@@ -111,6 +108,48 @@ public:
 	}
 
 private:
+
+	std::string utf8Encode(const std::wstring& wstr)
+	{
+		if (wstr.empty())
+			return std::string();
+
+		int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(),
+			NULL, 0, NULL, NULL);
+		std::string strTo(sizeNeeded, 0);
+		WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(),
+			&strTo[0], sizeNeeded, NULL, NULL);
+		return strTo;
+	}
+
+	grpc::SslCredentialsOptions getSslOptions()
+	{
+		// Fetch root certificate as required on Windows (s. issue 25533).
+		grpc::SslCredentialsOptions result;
+
+		// Open root certificate store.
+		HANDLE hRootCertStore = CertOpenSystemStoreW(NULL, L"ROOT");
+		if (!hRootCertStore)
+			return result;
+
+		// Get all root certificates.
+		PCCERT_CONTEXT pCert = NULL;
+		while ((pCert = CertEnumCertificatesInStore(hRootCertStore, pCert)) != NULL)
+		{
+			// Append this certificate in PEM formatted data.
+			DWORD size = 0;
+			CryptBinaryToStringW(pCert->pbCertEncoded, pCert->cbCertEncoded,
+				CRYPT_STRING_BASE64HEADER, NULL, &size);
+			std::vector<WCHAR> pem(size);
+			CryptBinaryToStringW(pCert->pbCertEncoded, pCert->cbCertEncoded,
+				CRYPT_STRING_BASE64HEADER, pem.data(), &size);
+
+			result.pem_root_certs += utf8Encode(pem.data());
+		}
+
+		CertCloseStore(hRootCertStore, 0);
+		return result;
+	}
 
 	std::vector<externalscripting::EventData> m_data;
 	std::string m_url;
