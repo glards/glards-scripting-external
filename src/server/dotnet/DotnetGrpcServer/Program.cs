@@ -1,8 +1,12 @@
 using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using DotnetGrpcServer.Services;
 using Microsoft.AspNetCore.HttpLogging;
 
+//AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
 var builder = WebApplication.CreateBuilder(args);
+
 
 //builder.WebHost.ConfigureKestrel(kestrel =>
 //{
@@ -10,6 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 //    {
 //        https.SslProtocols = SslProtocols.Tls12;
 //        https.AllowAnyClientCertificate();
+//        //https.ServerCertificate = new X509Certificate2("D:\\Perso\\glards-scripting-external\\etc\\cert.pfx", "1234");
 //    });
 //});
 
