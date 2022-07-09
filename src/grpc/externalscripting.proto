@@ -5,12 +5,21 @@ package externalscripting;
 
 service ExternalScripting {
 	rpc TriggerEvent(EventData) returns (EventResponse) {}
+
+
+	rpc EventStream(stream EventData) returns (stream ClientEventData);
 }
 
 message EventData {
 	string eventName = 1;
 	bytes eventPayload = 2;
 	string eventSource = 3;
+}
+
+message ClientEventData {
+	int32 destination = 1;
+	string eventName = 2;
+	bytes eventPayload = 3;
 }
 
 message EventResponse {
