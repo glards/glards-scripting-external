@@ -63,12 +63,12 @@ extern "C" DLL_EXPORT Component* CreateComponent()
 }
 
 
-class GrpcEndpoint
+class GrpcEndpoint : public grpc::ClientBidiReactor<externalscripting::EventData, externalscripting::ClientEventData>
 {
 public:
 	GrpcEndpoint(const std::string url)
 	{
-		m_url = url;
+		url_ = url;
 
 		grpc::ChannelArguments gargs;
 
@@ -77,8 +77,12 @@ public:
 
 		auto channel = grpc::CreateCustomChannel(url, creds, gargs);
 
-		m_stub = externalscripting::ExternalScripting::NewStub(channel);
-		m_data = std::vector<externalscripting::EventData>();
+		stub_ = externalscripting::ExternalScripting::NewStub(channel);
+		data_ = std::vector<externalscripting::EventData>();
+
+		stub_->async()->EventStream(&context_, this);
+
+
 	}
 
 	void AddEvent(std::string name, std::string payload, std::string source)
@@ -87,27 +91,54 @@ public:
 		data.set_eventname(name);
 		data.set_eventpayload(payload);
 		data.set_eventsource(source);
-		m_data.emplace_back(data);
+		data_.emplace_back(std::move(data));
 	}
 
-	void SendEvents()
-	{
-		for (auto ev : m_data)
-		{
-			grpc::ClientContext ctx;
-			externalscripting::EventResponse response;
-			auto status = m_stub->TriggerEvent(&ctx, ev, &response);
-			if (!status.ok())
-			{
-				trace("Unable to send RPC data to %s : %s\n\n%s\n", m_url, status.error_message(), status.error_details());
-				break;
-			}
-		}
+	//void SendEvents()
+	//{
+	//	for (auto ev : data_)
+	//	{
+	//		grpc::ClientContext ctx;
+	//		externalscripting::EventResponse response;
+	//		auto status = stub_->TriggerEvent(&ctx, ev, &response);
+	//		if (!status.ok())
+	//		{
+	//			trace("Unable to send RPC data to %s : %s\n\n%s\n", url_, status.error_message(), status.error_details());
+	//			break;
+	//		}
+	//	}
 
-		m_data.clear();
+	//	data_.clear();
+	//}
+
+	void SetEventManager(const fwRefContainer<fx::ResourceEventManagerComponent> eventManager)
+	{
+		eventManager_ = eventManager;
+	}
+
+	void OnDone(const grpc::Status&) override
+	{
+		
+	}
+
+	void OnReadDone(bool) override
+	{
+		
+	}
+
+	void OnWriteDone(bool) override
+	{
+		
+	}
+
+	void OnWritesDoneDone(bool) override
+	{
+		
 	}
 
 private:
+
+	
 
 	std::string utf8Encode(const std::wstring& wstr)
 	{
@@ -150,10 +181,14 @@ private:
 		CertCloseStore(hRootCertStore, 0);
 		return result;
 	}
+	fwRefContainer<fx::ResourceEventManagerComponent> eventManager_ = nullptr;
+	grpc::ClientContext context_;
+	std::vector<externalscripting::EventData> data_;
+	std::string url_;
+	std::unique_ptr<externalscripting::ExternalScripting::Stub> stub_;
 
-	std::vector<externalscripting::EventData> m_data;
-	std::string m_url;
-	std::unique_ptr<externalscripting::ExternalScripting::Stub> m_stub;
+	std::mutex mutex_;
+	std::condition_variable cv_;
 };
 
 static std::unordered_set<GrpcEndpoint*> g_grpcEndpoints;
@@ -171,7 +206,14 @@ static InitFunction initFunction([]()
 	fx::ResourceManager::OnInitializeInstance.Connect([](fx::ResourceManager* self)
 	{
 		const fwRefContainer<fx::ResourceEventManagerComponent> eventComponent = self->GetComponent<fx::ResourceEventManagerComponent>();
-		
+
+		trace("OnInitializeInstance");
+
+		for (GrpcEndpoint* ep : g_grpcEndpoints)
+		{
+			ep->SetEventManager(eventComponent);
+		}
+
 		if (eventComponent.GetRef())
 		{
 			eventComponent->OnTriggerEvent.Connect([](const std::string& eventName, const std::string& eventPayload, const std::string& eventSource, bool* eventCanceled)
@@ -185,10 +227,10 @@ static InitFunction initFunction([]()
 
 		self->OnTick.Connect([]()
 		{
-				for (GrpcEndpoint* ep : g_grpcEndpoints)
-				{
-					ep->SendEvents();
-				}
+				//for (GrpcEndpoint* ep : g_grpcEndpoints)
+				//{
+				//	ep->SendEvents();
+				//}
 		});
 	});
 });
